@@ -6,17 +6,23 @@ class MockAuthService {
   static final MockAuthService instance = MockAuthService._();
 
   final List<AppUser> _users = [
-    const AppUser(
+    AppUser(
       name: 'Ali Raza',
       email: 'ali@student.pk',
       password: '123456',
       role: 'Student',
     ),
-    const AppUser(
+    AppUser(
       name: 'Sara Khan',
       email: 'sara@faculty.pk',
       password: '123456',
       role: 'Faculty',
+    ),
+    AppUser(
+      name: 'Admin User',
+      email: 'admin@canteen.pk',
+      password: '123456',
+      role: 'Admin',
     ),
   ];
 
@@ -63,5 +69,25 @@ class MockAuthService {
 
   void logout() {
     _currentUser = null;
+  }
+
+  void updateUserRole(String email, String newRole) {
+    final normalizedEmail = email.trim().toLowerCase();
+    final userIndex = _users.indexWhere((user) => user.email == normalizedEmail);
+    
+    if (userIndex != -1) {
+      final user = _users[userIndex];
+      _users[userIndex] = AppUser(
+        name: user.name,
+        email: user.email,
+        password: user.password,
+        role: newRole,
+      );
+      
+      // Update current user if it's the same user
+      if (_currentUser?.email == normalizedEmail) {
+        _currentUser = _users[userIndex];
+      }
+    }
   }
 }

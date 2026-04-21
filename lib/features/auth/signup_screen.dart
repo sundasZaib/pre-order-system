@@ -64,7 +64,10 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Signup')),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Signup'),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -79,14 +82,14 @@ class _SignupScreenState extends State<SignupScreen> {
                     const Text(
                       'Create Account',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
                     ),
                     const SizedBox(height: 18),
                     TextFormField(
                       controller: _nameController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Full Name',
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.person_outline),
                       ),
                       validator: (value) {
                         if ((value ?? '').trim().isEmpty) {
@@ -98,9 +101,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: _selectedRole,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Role',
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.badge_outlined),
                       ),
                       items: const [
                         DropdownMenuItem(value: 'Student', child: Text('Student')),
@@ -118,9 +121,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Email',
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.email_outlined),
                       ),
                       validator: (value) {
                         final trimmed = value?.trim() ?? '';
@@ -137,9 +140,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: true,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Password',
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock_outlined),
                       ),
                       validator: (value) {
                         if ((value ?? '').length < 6) {
