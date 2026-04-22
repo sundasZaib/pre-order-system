@@ -36,7 +36,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
     await Future<void>.delayed(const Duration(milliseconds: 350));
 
-    final isSuccess = MockAuthService.instance.signup(
+    final isSuccess = await MockAuthService.instance.signup(
       name: _nameController.text,
       email: _emailController.text,
       password: _passwordController.text,

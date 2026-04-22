@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "822799655128",
+    "project_id": "preorder-system-132",
+    "storage_bucket": "preorder-system-132.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:822799655128:android:105209249b1699d05477ad",
+        "android_client_info": {
+          "package_name": "com.example.pre_order_system"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0sFpCTIn2o3_-RJh2VVLXTejNxfTH2ws"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

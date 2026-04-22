@@ -28,7 +28,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     super.dispose();
   }
 
-  void _saveChanges() {
+  Future<void> _saveChanges() async {
+    await MockAuthService.instance.updateUserName(_nameController.text);
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _isEditing = false;
     });

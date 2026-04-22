@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import 'package:pre_order_system/shared/models/menu_item.dart';
 import 'package:pre_order_system/shared/models/order.dart';
 import 'package:pre_order_system/features/orders/token_service.dart';
@@ -8,17 +10,32 @@ class OrderService {
 
   static final OrderService instance = OrderService._();
 
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final List<Order> _orders = [];
   String? _currentServingToken;
-  int _orderIdCounter = 0;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ordersSubscription;
+  bool _isInitialized = false;
 
   final _ordersController = StreamController<List<Order>>.broadcast();
   final _currentTokenController = StreamController<String?>.broadcast();
 
-  Stream<List<Order>> get ordersStream => _ordersController.stream;
-  Stream<String?> get currentTokenStream => _currentTokenController.stream;
+  CollectionReference<Map<String, dynamic>> get _ordersCollection =>
+      _firestore.collection('orders');
 
-  List<Order> get allOrders => List.unmodifiable(_orders);
+  Stream<List<Order>> get ordersStream {
+    _ensureInitialized();
+    return _ordersController.stream;
+  }
+
+  Stream<String?> get currentTokenStream {
+    _ensureInitialized();
+    return _currentTokenController.stream;
+  }
+
+  List<Order> get allOrders {
+    _ensureInitialized();
+    return List.unmodifiable(_orders);
+  }
   
   List<Order> get activeOrders => _orders
       .where((o) => o.status != OrderStatus.completed)
@@ -50,13 +67,73 @@ class OrderService {
     return pending + preparing;
   }
 
+  void _ensureInitialized() {
+    if (_isInitialized) {
+      return;
+    }
+
+    _isInitialized = true;
+    _ordersSubscription = _ordersCollection
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .listen((snapshot) {
+          _orders
+            ..clear()
+            ..addAll(snapshot.docs.map(_mapDocToOrder));
+
+          _updateCurrentServingToken();
+          _notifyListeners();
+        });
+  }
+
+  Order _mapDocToOrder(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    final rawItems = (data['items'] as List<dynamic>? ?? const []);
+
+    final items = rawItems
+        .map((item) => OrderItem.fromMap((item as Map).cast<String, dynamic>()))
+        .toList();
+
+    final createdAtField = data['createdAt'];
+    final createdAt = createdAtField is Timestamp
+        ? createdAtField.toDate()
+        : DateTime.now();
+
+    return Order(
+      id: doc.id,
+      token: (data['token'] as String?) ?? '',
+      userId: (data['userId'] as String?) ?? '',
+      userName: (data['userName'] as String?) ?? 'User',
+      items: items,
+      totalAmount: (data['totalAmount'] as num?)?.toDouble() ?? 0,
+      createdAt: createdAt,
+      status: orderStatusFromString((data['status'] as String?) ?? 'pending'),
+      estimatedMinutes: (data['estimatedMinutes'] as num?)?.toInt() ?? 15,
+    );
+  }
+
+  void _updateCurrentServingToken() {
+    String? readyToken;
+    for (final order in _orders.reversed) {
+      if (order.status == OrderStatus.ready) {
+        readyToken = order.token;
+        break;
+      }
+    }
+
+    if (readyToken != _currentServingToken) {
+      _currentServingToken = readyToken;
+      _currentTokenController.add(_currentServingToken);
+    }
+  }
+
   Order placeOrder({
     required String userId,
     required String userName,
     required Map<String, int> quantities,
     required List<MenuItem> menuItems,
   }) {
-    _orderIdCounter++;
+    _ensureInitialized();
     final token = TokenService.instance.generateDailyToken();
     
     final orderItems = <OrderItem>[];
@@ -71,7 +148,7 @@ class OrderService {
     }
 
     final order = Order(
-      id: _orderIdCounter.toString(),
+      id: '',
       token: token,
       userId: userId,
       userName: userName,
@@ -81,8 +158,8 @@ class OrderService {
       estimatedMinutes: 10 + (orderItems.length * 3),
     );
 
-    _orders.add(order);
-    _notifyListeners();
+    final orderPayload = order.toMap();
+    unawaited(_ordersCollection.add(orderPayload));
     
     return order;
   }
@@ -100,17 +177,21 @@ class OrderService {
   }
 
   void updateOrderStatus(String orderId, OrderStatus newStatus) {
+    _ensureInitialized();
+
     final orderIndex = _orders.indexWhere((o) => o.id == orderId);
-    if (orderIndex != -1) {
-      _orders[orderIndex].status = newStatus;
-      
-      if (newStatus == OrderStatus.ready) {
-        _currentServingToken = _orders[orderIndex].token;
-        _currentTokenController.add(_currentServingToken);
-      }
-      
-      _notifyListeners();
+    if (orderIndex == -1) {
+      return;
     }
+
+    _orders[orderIndex].status = newStatus;
+    if (newStatus == OrderStatus.ready) {
+      _currentServingToken = _orders[orderIndex].token;
+      _currentTokenController.add(_currentServingToken);
+    }
+
+    _notifyListeners();
+    unawaited(_ordersCollection.doc(orderId).update({'status': newStatus.name}));
   }
 
   void callNextToken() {
@@ -130,6 +211,7 @@ class OrderService {
   }
 
   int getEstimatedWaitTime(String token) {
+    _ensureInitialized();
     final order = getOrderByToken(token);
     if (order == null) return 0;
     
@@ -149,7 +231,10 @@ class OrderService {
   }
 
   void dispose() {
+    _ordersSubscription?.cancel();
+    _ordersSubscription = null;
     _ordersController.close();
     _currentTokenController.close();
+    _isInitialized = false;
   }
 }
