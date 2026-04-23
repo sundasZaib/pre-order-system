@@ -12,59 +12,24 @@ class MockAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  StreamSubscription<User?>? _authSubscription;
-
   AppUser? _currentUser;
-  bool _initialized = false;
 
   CollectionReference<Map<String, dynamic>> get _usersCollection =>
       _firestore.collection('users');
 
-  AppUser? get currentUser {
-    _ensureInitialized();
-    final firebaseUser = _auth.currentUser;
-    if (_currentUser == null && firebaseUser != null) {
-      unawaited(_syncCurrentUserFromFirestore(firebaseUser.uid));
-    }
-    return _currentUser;
-  }
+  AppUser? get currentUser => _currentUser;
 
-  void _ensureInitialized() {
-    if (_initialized) {
+  Future<void> restoreSession() async {
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) {
+      _currentUser = null;
       return;
     }
 
-    _initialized = true;
-    _authSubscription = _auth.authStateChanges().listen((firebaseUser) {
-      if (firebaseUser == null) {
-        _currentUser = null;
-        return;
-      }
-
-      _syncCurrentUserFromFirestore(firebaseUser.uid);
-    });
-  }
-
-  Future<void> _syncCurrentUserFromFirestore(String uid) async {
     try {
-      final snapshot = await _usersCollection.doc(uid).get();
-      if (!snapshot.exists) {
-        final firebaseUser = _auth.currentUser;
-        if (firebaseUser == null) {
-          return;
-        }
-
-        _currentUser = AppUser(
-          name: firebaseUser.displayName ?? 'User',
-          email: firebaseUser.email ?? '',
-          role: 'Student',
-        );
-        return;
-      }
-
-      _currentUser = AppUser.fromMap(snapshot.data()!);
-    } catch (_) {
-      // Keep local state untouched on transient backend failures.
+      _currentUser = await _readProfile(firebaseUser);
+    } on FirebaseException {
+      _currentUser = _buildFallbackUser(firebaseUser);
     }
   }
 
@@ -74,8 +39,6 @@ class MockAuthService {
     required String password,
     required String role,
   }) async {
-    _ensureInitialized();
-
     final normalizedEmail = email.trim().toLowerCase();
 
     try {
@@ -84,24 +47,42 @@ class MockAuthService {
         password: password,
       );
 
-      await credential.user?.updateDisplayName(name.trim());
+      final user = credential.user;
+      if (user == null) {
+        return false;
+      }
 
-      final newUser = AppUser(
+      await user.updateDisplayName(name.trim());
+
+      final profile = {
+        'name': name.trim(),
+        'email': normalizedEmail,
+        'role': role,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      try {
+        await _usersCollection.doc(user.uid).set(profile);
+      } on FirebaseException {
+        // Keep the auth account usable even if Firestore is unavailable.
+      }
+
+      _currentUser = AppUser(
         name: name.trim(),
         email: normalizedEmail,
+        password: '',
         role: role,
       );
 
-      await _usersCollection.doc(credential.user!.uid).set(newUser.toMap());
-      _currentUser = newUser;
       return true;
     } on FirebaseAuthException {
+      return false;
+    } on FirebaseException {
       return false;
     }
   }
 
   Future<bool> login({required String email, required String password}) async {
-    _ensureInitialized();
     final normalizedEmail = email.trim().toLowerCase();
 
     try {
@@ -110,39 +91,121 @@ class MockAuthService {
         password: password,
       );
 
-      await _syncCurrentUserFromFirestore(credential.user!.uid);
+      final user = credential.user;
+      if (user == null) {
+        return false;
+      }
+
+      try {
+        _currentUser = await _readProfile(user);
+      } on FirebaseException {
+        _currentUser = _buildFallbackUser(user);
+      }
+
       return true;
     } on FirebaseAuthException {
+      return false;
+    } on FirebaseException {
       return false;
     }
   }
 
   void logout() {
-    _ensureInitialized();
     unawaited(_auth.signOut());
     _currentUser = null;
   }
 
   void updateUserRole(String email, String newRole) {
-    _ensureInitialized();
     final normalizedEmail = email.trim().toLowerCase();
 
-    if (_currentUser == null || _currentUser!.email != normalizedEmail) {
+    if (_currentUser?.email == normalizedEmail) {
+      final user = _currentUser!;
+      _currentUser = AppUser(
+        name: user.name,
+        email: user.email,
+        password: user.password,
+        role: newRole,
+      );
+    }
+
+    unawaited(_updateRoleByEmail(normalizedEmail, newRole));
+  }
+
+  Future<void> updateUserName(String newName) async {
+    final trimmedName = newName.trim();
+    if (trimmedName.isEmpty || _currentUser == null) {
       return;
     }
 
     _currentUser = AppUser(
-      name: _currentUser!.name,
+      name: trimmedName,
       email: _currentUser!.email,
-      role: newRole,
+      password: _currentUser!.password,
+      role: _currentUser!.role,
     );
 
-    final uid = _auth.currentUser?.uid;
-    if (uid != null) {
-      unawaited(_usersCollection.doc(uid).update({'role': newRole}));
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) {
+      return;
     }
+
+    await firebaseUser.updateDisplayName(trimmedName);
+    await _usersCollection.doc(firebaseUser.uid).update({'name': trimmedName});
   }
 
+  Future<AppUser> _readProfile(User firebaseUser) async {
+    final profileDoc = await _usersCollection.doc(firebaseUser.uid).get();
+    final profile = profileDoc.data();
+
+    final email = firebaseUser.email ?? '';
+    final role = (profile?['role'] as String?) ?? 'Student';
+    final name = (profile?['name'] as String?) ??
+        (firebaseUser.displayName?.trim().isNotEmpty == true
+            ? firebaseUser.displayName!.trim()
+            : 'User');
+
+    return AppUser(
+      name: name,
+      email: email,
+      password: '',
+      role: role,
+    );
+  }
+
+  Future<void> _updateRoleByEmail(String email, String newRole) async {
+    QuerySnapshot<Map<String, dynamic>> query;
+
+    try {
+      query = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+    } on FirebaseException {
+      return;
+    }
+
+    if (query.docs.isEmpty) {
+      return;
+    }
+
+    await query.docs.first.reference.update({'role': newRole});
+  }
+
+  AppUser _buildFallbackUser(User firebaseUser) {
+    final email = (firebaseUser.email ?? '').trim().toLowerCase();
+    final guessedName = (firebaseUser.displayName ?? '').trim();
+
+    return AppUser(
+      name: guessedName.isEmpty ? 'User' : guessedName,
+      email: email,
+      password: '',
+      role: 'Student',
+    );
+  }
+
+  void dispose() {}
+}
   Future<void> updateUserName(String newName) async {
     _ensureInitialized();
 
