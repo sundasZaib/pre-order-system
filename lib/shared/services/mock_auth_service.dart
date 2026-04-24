@@ -206,32 +206,4 @@ class MockAuthService {
 
   void dispose() {}
 }
-  Future<void> updateUserName(String newName) async {
-    _ensureInitialized();
-
-    final trimmedName = newName.trim();
-    if (trimmedName.isEmpty || _currentUser == null) {
-      return;
-    }
-
-    _currentUser = AppUser(
-      name: trimmedName,
-      email: _currentUser!.email,
-      role: _currentUser!.role,
-    );
-
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) {
-      return;
-    }
-
-    await _auth.currentUser?.updateDisplayName(trimmedName);
-    await _usersCollection.doc(uid).update({'name': trimmedName});
-  }
-
-  void dispose() {
-    _authSubscription?.cancel();
-    _authSubscription = null;
-    _initialized = false;
-  }
-}
+ 
