@@ -47,7 +47,10 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (isSuccess) {
-      Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+      Navigator.pushReplacementNamed(
+        context,
+        MockAuthService.instance.postLoginRoute,
+      );
       return;
     }
 

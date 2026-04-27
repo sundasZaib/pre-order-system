@@ -37,6 +37,7 @@ class OrderItem {
       'menuItem': {
         'id': menuItem.id,
         'name': menuItem.name,
+        'description': menuItem.description,
         'price': menuItem.price,
         'category': menuItem.category,
         'imageUrl': menuItem.imageUrl,
@@ -51,6 +52,7 @@ class OrderItem {
       menuItem: MenuItem(
         id: (menuMap['id'] as String?) ?? '',
         name: (menuMap['name'] as String?) ?? '',
+        description: (menuMap['description'] as String?) ?? '',
         price: (menuMap['price'] as num?)?.toDouble() ?? 0,
         category: (menuMap['category'] as String?) ?? '',
         imageUrl: (menuMap['imageUrl'] as String?) ?? '',

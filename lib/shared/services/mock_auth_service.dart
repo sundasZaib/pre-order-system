@@ -2,12 +2,16 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pre_order_system/app/routes.dart';
 import 'package:pre_order_system/shared/models/app_user.dart';
 
 class MockAuthService {
   MockAuthService._();
 
   static final MockAuthService instance = MockAuthService._();
+  static const String roleAdmin = 'admin';
+  static const String roleStudent = 'student';
+  static const String roleFaculty = 'faculty';
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -18,6 +22,25 @@ class MockAuthService {
       _firestore.collection('users');
 
   AppUser? get currentUser => _currentUser;
+
+  String? get currentUserRoleKey {
+    final role = _currentUser?.role;
+    if (role == null) {
+      return null;
+    }
+    return _normalizeRole(role);
+  }
+
+  bool get canManageMenuAndViewAllOrders => currentUserRoleKey == roleAdmin;
+
+  bool get canPlaceOrderAndViewOwnHistory {
+    final role = currentUserRoleKey;
+    return role == roleStudent || role == roleFaculty;
+  }
+
+  String get postLoginRoute {
+    return canManageMenuAndViewAllOrders ? AppRoutes.admin : AppRoutes.dashboard;
+  }
 
   Future<void> restoreSession() async {
     final firebaseUser = _auth.currentUser;
@@ -40,6 +63,8 @@ class MockAuthService {
     required String role,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
+    final roleKey = _normalizeRole(role);
+    final roleLabel = _toDisplayRole(roleKey);
 
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -57,7 +82,7 @@ class MockAuthService {
       final profile = {
         'name': name.trim(),
         'email': normalizedEmail,
-        'role': role,
+        'role': roleKey,
         'createdAt': FieldValue.serverTimestamp(),
       };
 
@@ -71,7 +96,7 @@ class MockAuthService {
         name: name.trim(),
         email: normalizedEmail,
         password: '',
-        role: role,
+        role: roleLabel,
       );
 
       return true;
@@ -97,7 +122,9 @@ class MockAuthService {
       }
 
       try {
-        _currentUser = await _readProfile(user);
+        final roleKey = await fetchUserRoleFromFirestore(user.uid);
+        final profile = await _readProfile(user, forcedRoleKey: roleKey);
+        _currentUser = profile;
       } on FirebaseException {
         _currentUser = _buildFallbackUser(user);
       }
@@ -117,6 +144,8 @@ class MockAuthService {
 
   void updateUserRole(String email, String newRole) {
     final normalizedEmail = email.trim().toLowerCase();
+    final roleKey = _normalizeRole(newRole);
+    final roleLabel = _toDisplayRole(roleKey);
 
     if (_currentUser?.email == normalizedEmail) {
       final user = _currentUser!;
@@ -124,11 +153,11 @@ class MockAuthService {
         name: user.name,
         email: user.email,
         password: user.password,
-        role: newRole,
+        role: roleLabel,
       );
     }
 
-    unawaited(_updateRoleByEmail(normalizedEmail, newRole));
+    unawaited(_updateRoleByEmail(normalizedEmail, roleKey));
   }
 
   Future<void> updateUserName(String newName) async {
@@ -153,12 +182,19 @@ class MockAuthService {
     await _usersCollection.doc(firebaseUser.uid).update({'name': trimmedName});
   }
 
-  Future<AppUser> _readProfile(User firebaseUser) async {
+  Future<String> fetchUserRoleFromFirestore(String uid) async {
+    final profileDoc = await _usersCollection.doc(uid).get();
+    final profile = profileDoc.data();
+    final storedRole = (profile?['role'] as String?) ?? roleStudent;
+    return _normalizeRole(storedRole);
+  }
+
+  Future<AppUser> _readProfile(User firebaseUser, {String? forcedRoleKey}) async {
     final profileDoc = await _usersCollection.doc(firebaseUser.uid).get();
     final profile = profileDoc.data();
 
     final email = firebaseUser.email ?? '';
-    final role = (profile?['role'] as String?) ?? 'Student';
+    final roleKey = forcedRoleKey ?? _normalizeRole((profile?['role'] as String?) ?? roleStudent);
     final name = (profile?['name'] as String?) ??
         (firebaseUser.displayName?.trim().isNotEmpty == true
             ? firebaseUser.displayName!.trim()
@@ -168,7 +204,7 @@ class MockAuthService {
       name: name,
       email: email,
       password: '',
-      role: role,
+      role: _toDisplayRole(roleKey),
     );
   }
 
@@ -200,8 +236,30 @@ class MockAuthService {
       name: guessedName.isEmpty ? 'User' : guessedName,
       email: email,
       password: '',
-      role: 'Student',
+      role: _toDisplayRole(roleStudent),
     );
+  }
+
+  String _normalizeRole(String role) {
+    final normalized = role.trim().toLowerCase();
+    if (normalized == roleAdmin) {
+      return roleAdmin;
+    }
+    if (normalized == roleFaculty) {
+      return roleFaculty;
+    }
+    return roleStudent;
+  }
+
+  String _toDisplayRole(String role) {
+    switch (role) {
+      case roleAdmin:
+        return 'Admin';
+      case roleFaculty:
+        return 'Faculty';
+      default:
+        return 'Student';
+    }
   }
 
   void dispose() {}

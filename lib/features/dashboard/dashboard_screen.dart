@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:pre_order_system/app/routes.dart';
 import 'package:pre_order_system/shared/models/menu_item.dart';
@@ -15,7 +17,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
-  final List<MenuItem> _menu = MenuRepository.menu;
+  List<MenuItem> _menu = List<MenuItem>.from(MenuRepository.menu);
+  List<String> _menuCategories = List<String>.from(MenuRepository.categories);
   final Map<String, int> _selectedQuantities = {};
   int _selectedTabIndex = 0;
   int _selectedCategoryIndex = 0;
@@ -23,12 +26,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _emailReceipts = true;
 
   late TabController _categoryTabController;
+  StreamSubscription<List<MenuItem>>? _menuSubscription;
 
   @override
   void initState() {
     super.initState();
     _categoryTabController = TabController(
-      length: MenuRepository.categories.length,
+      length: _menuCategories.length,
       vsync: this,
     );
     _categoryTabController.addListener(() {
@@ -36,16 +40,50 @@ class _DashboardScreenState extends State<DashboardScreen>
         _selectedCategoryIndex = _categoryTabController.index;
       });
     });
+
+    _menuSubscription = MenuRepository.streamMenuItems().listen((items) {
+      if (!mounted) {
+        return;
+      }
+
+      final updatedCategories = _buildCategoriesFromMenu(items);
+
+      setState(() {
+        _menu = items;
+        if (_areCategoriesDifferent(_menuCategories, updatedCategories)) {
+          _menuCategories = updatedCategories;
+          final nextIndex = _selectedCategoryIndex.clamp(0, _menuCategories.length - 1);
+          _selectedCategoryIndex = nextIndex;
+
+          _categoryTabController.dispose();
+          _categoryTabController = TabController(
+            length: _menuCategories.length,
+            vsync: this,
+            initialIndex: nextIndex,
+          );
+          _categoryTabController.addListener(() {
+            setState(() {
+              _selectedCategoryIndex = _categoryTabController.index;
+            });
+          });
+        }
+
+        _selectedQuantities.removeWhere(
+          (menuItemId, _) => !_menu.any((item) => item.id == menuItemId),
+        );
+      });
+    });
   }
 
   @override
   void dispose() {
+    _menuSubscription?.cancel();
     _categoryTabController.dispose();
     super.dispose();
   }
 
   bool get _isAdmin {
-    return MockAuthService.instance.currentUser?.role == 'Admin';
+    return MockAuthService.instance.canManageMenuAndViewAllOrders;
   }
 
   int get _totalItems {
@@ -219,9 +257,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildMenuTab(String userName) {
-    final categories = MenuRepository.categories;
+    final categories = _menuCategories;
     final currentCategory = categories[_selectedCategoryIndex];
-    final categoryItems = MenuRepository.getItemsByCategory(currentCategory);
+    final categoryItems = MenuRepository.getItemsByCategory(_menu, currentCategory);
 
     return Column(
       children: [
@@ -312,6 +350,41 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
       ],
     );
+  }
+
+  List<String> _buildCategoriesFromMenu(List<MenuItem> items) {
+    final categoryOrder = <String>[];
+
+    for (final category in MenuRepository.categories) {
+      categoryOrder.add(category);
+    }
+
+    for (final item in items) {
+      final category = item.category.trim();
+      if (category.isNotEmpty && !categoryOrder.contains(category)) {
+        categoryOrder.add(category);
+      }
+    }
+
+    if (categoryOrder.isEmpty) {
+      return List<String>.from(MenuRepository.categories);
+    }
+
+    return categoryOrder;
+  }
+
+  bool _areCategoriesDifferent(List<String> current, List<String> next) {
+    if (current.length != next.length) {
+      return true;
+    }
+
+    for (var index = 0; index < current.length; index++) {
+      if (current[index] != next[index]) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   Widget _buildMenuItemCard(MenuItem item, int qty) {
@@ -1121,7 +1194,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     onTap: () =>
                         Navigator.pushNamed(context, AppRoutes.helpSupport),
                   ),
-                  if (currentUser?.role == 'Admin')
+                  if (MockAuthService.instance.canManageMenuAndViewAllOrders)
                     ListTile(
                       leading: const Icon(Icons.admin_panel_settings_outlined),
                       title: const Text('Admin Panel'),
@@ -1228,7 +1301,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                     title: const Text('Inventory items'),
                     subtitle: Text(
-                      '${MenuRepository.menu.length} items configured',
+                      '${_menu.length} items configured',
                     ),
                   ),
                   ListTile(
@@ -1389,7 +1462,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget build(BuildContext context) {
     final currentUser = MockAuthService.instance.currentUser;
     final userName = currentUser?.name ?? 'User';
-    final isAdmin = currentUser?.role == 'Admin';
+    final isAdmin = MockAuthService.instance.canManageMenuAndViewAllOrders;
     final selectedNavIndex = isAdmin
         ? (_selectedTabIndex > 2 ? 2 : _selectedTabIndex)
         : _selectedTabIndex;

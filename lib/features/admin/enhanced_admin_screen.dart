@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:pre_order_system/shared/models/menu_item.dart';
 import 'package:pre_order_system/shared/models/order.dart';
@@ -14,15 +16,26 @@ class EnhancedAdminScreen extends StatefulWidget {
 class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  List<MenuItem> _menuItems = List<MenuItem>.from(MenuRepository.menu);
+  StreamSubscription<List<MenuItem>>? _menuSubscription;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
+    _menuSubscription = MenuRepository.streamMenuItems().listen((items) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _menuItems = items;
+      });
+    });
   }
 
   @override
   void dispose() {
+    _menuSubscription?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -275,7 +288,7 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
 
   // Menu Management Tab
   Widget _buildMenuManagementTab() {
-    final menu = MenuRepository.menu;
+    final menu = _menuItems;
 
     return Column(
       children: [
@@ -368,6 +381,15 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
+                  if (item.description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      item.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white60, fontSize: 11),
+                    ),
+                  ],
                   const Spacer(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -480,7 +502,7 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
             itemCount: categories.length,
             itemBuilder: (context, index) {
               final category = categories[index];
-              final itemCount = MenuRepository.menu
+                final itemCount = _menuItems
                   .where((item) => item.category == category)
                   .length;
               return _buildCategoryCard(category, itemCount);
@@ -975,9 +997,34 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
     _updateOrderStatus(pending.first, OrderStatus.preparing);
   }
 
+  InputDecoration _adminDialogInputDecoration(String label, {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      floatingLabelStyle: const TextStyle(color: Color(0xFFFFD166)),
+      labelStyle: const TextStyle(color: Colors.white70),
+      hintStyle: const TextStyle(color: Colors.white38),
+      filled: true,
+      fillColor: const Color(0xFF0F1D5B),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Colors.white24),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFFFD166), width: 1.5),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+    );
+  }
+
   // Dialog Methods
   void _showAddMenuItemDialog() {
     final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
     final priceController = TextEditingController();
     final imageController = TextEditingController();
     String selectedCategory = MenuRepository.categories.first;
@@ -986,9 +1033,13 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A237E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.white24),
+        ),
         title: const Text(
           'Add Menu Item',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -997,35 +1048,29 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
               TextField(
                 controller: nameController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Item Name',
-                  labelStyle: TextStyle(color: Colors.white70),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white38),
-                  ),
-                ),
+                decoration: _adminDialogInputDecoration('Item Name'),
               ),
+              const SizedBox(height: 10),
               TextField(
                 controller: priceController,
                 keyboardType: TextInputType.number,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Price',
-                  labelStyle: TextStyle(color: Colors.white70),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white38),
-                  ),
-                ),
+                decoration: _adminDialogInputDecoration('Price'),
               ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: descriptionController,
+                maxLines: 2,
+                style: const TextStyle(color: Colors.white),
+                decoration: _adminDialogInputDecoration('Description'),
+              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: imageController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Image URL',
-                  labelStyle: TextStyle(color: Colors.white70),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white38),
-                  ),
+                decoration: _adminDialogInputDecoration(
+                  'Image URL',
+                  hint: 'https://...',
                 ),
               ),
               const SizedBox(height: 16),
@@ -1033,10 +1078,8 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
                 initialValue: selectedCategory,
                 dropdownColor: const Color(0xFF1A237E),
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  labelStyle: TextStyle(color: Colors.white70),
-                ),
+                iconEnabledColor: const Color(0xFFFFD166),
+                decoration: _adminDialogInputDecoration('Category'),
                 items: MenuRepository.categories.map((cat) {
                   return DropdownMenuItem(value: cat, child: Text(cat));
                 }).toList(),
@@ -1056,22 +1099,25 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              MenuRepository.addMenuItem(
-                nameController.text,
-                double.tryParse(priceController.text) ?? 0,
-                selectedCategory,
-                imageController.text,
+            onPressed: () async {
+              await MenuRepository.addMenuItem(
+                name: nameController.text,
+                description: descriptionController.text,
+                price: double.tryParse(priceController.text) ?? 0,
+                category: selectedCategory,
+                imageUrl: imageController.text,
               );
-              setState(() {});
               Navigator.pop(context);
+              if (!mounted) {
+                return;
+              }
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Menu item added successfully')),
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF1A237E),
+              backgroundColor: const Color(0xFFFFD166),
+              foregroundColor: const Color(0xFF0F1D5B),
             ),
             child: const Text('Add'),
           ),
@@ -1082,6 +1128,7 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
 
   void _showEditMenuItemDialog(MenuItem item) {
     final nameController = TextEditingController(text: item.name);
+    final descriptionController = TextEditingController(text: item.description);
     final priceController = TextEditingController(text: item.price.toString());
     final imageController = TextEditingController(text: item.imageUrl);
     String selectedCategory = item.category;
@@ -1090,9 +1137,13 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A237E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.white24),
+        ),
         title: const Text(
           'Edit Menu Item',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -1101,35 +1152,29 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
               TextField(
                 controller: nameController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Item Name',
-                  labelStyle: TextStyle(color: Colors.white70),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white38),
-                  ),
-                ),
+                decoration: _adminDialogInputDecoration('Item Name'),
               ),
+              const SizedBox(height: 10),
               TextField(
                 controller: priceController,
                 keyboardType: TextInputType.number,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Price',
-                  labelStyle: TextStyle(color: Colors.white70),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white38),
-                  ),
-                ),
+                decoration: _adminDialogInputDecoration('Price'),
               ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: descriptionController,
+                maxLines: 2,
+                style: const TextStyle(color: Colors.white),
+                decoration: _adminDialogInputDecoration('Description'),
+              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: imageController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Image URL',
-                  labelStyle: TextStyle(color: Colors.white70),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white38),
-                  ),
+                decoration: _adminDialogInputDecoration(
+                  'Image URL',
+                  hint: 'https://...',
                 ),
               ),
               const SizedBox(height: 16),
@@ -1137,10 +1182,8 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
                 initialValue: selectedCategory,
                 dropdownColor: const Color(0xFF1A237E),
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  labelStyle: TextStyle(color: Colors.white70),
-                ),
+                iconEnabledColor: const Color(0xFFFFD166),
+                decoration: _adminDialogInputDecoration('Category'),
                 items: MenuRepository.categories.map((cat) {
                   return DropdownMenuItem(value: cat, child: Text(cat));
                 }).toList(),
@@ -1160,23 +1203,26 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              MenuRepository.updateMenuItem(
-                item.id,
-                nameController.text,
-                double.tryParse(priceController.text) ?? item.price,
-                selectedCategory,
-                imageController.text,
+            onPressed: () async {
+              await MenuRepository.updateMenuItem(
+                id: item.id,
+                name: nameController.text,
+                description: descriptionController.text,
+                price: double.tryParse(priceController.text) ?? item.price,
+                category: selectedCategory,
+                imageUrl: imageController.text,
               );
-              setState(() {});
               Navigator.pop(context);
+              if (!mounted) {
+                return;
+              }
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Menu item updated successfully')),
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF1A237E),
+              backgroundColor: const Color(0xFFFFD166),
+              foregroundColor: const Color(0xFF0F1D5B),
             ),
             child: const Text('Save'),
           ),
@@ -1204,10 +1250,12 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              MenuRepository.deleteMenuItem(item.id);
-              setState(() {});
+            onPressed: () async {
+              await MenuRepository.deleteMenuItem(item.id);
               Navigator.pop(context);
+              if (!mounted) {
+                return;
+              }
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Menu item deleted')),
               );
@@ -1326,7 +1374,7 @@ class _EnhancedAdminScreenState extends State<EnhancedAdminScreen>
   }
 
   void _deleteCategory(String category) {
-    final itemCount = MenuRepository.menu
+    final itemCount = _menuItems
         .where((item) => item.category == category)
         .length;
 

@@ -58,7 +58,10 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+    Navigator.pushReplacementNamed(
+      context,
+      MockAuthService.instance.postLoginRoute,
+    );
   }
 
   @override

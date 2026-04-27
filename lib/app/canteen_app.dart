@@ -8,6 +8,7 @@ import 'package:pre_order_system/features/splash/splash_screen.dart';
 import 'package:pre_order_system/features/account/profile_settings_screen.dart';
 import 'package:pre_order_system/features/account/change_password_screen.dart';
 import 'package:pre_order_system/features/account/help_support_screen.dart';
+import 'package:pre_order_system/shared/services/mock_auth_service.dart';
 
 class CanteenApp extends StatelessWidget {
   const CanteenApp({super.key});
@@ -111,7 +112,12 @@ class CanteenApp extends StatelessWidget {
         AppRoutes.login: (context) => const LoginScreen(),
         AppRoutes.signup: (context) => const SignupScreen(),
         AppRoutes.dashboard: (context) => const DashboardScreen(),
-        AppRoutes.admin: (context) => const EnhancedAdminScreen(),
+        AppRoutes.admin: (context) {
+          if (MockAuthService.instance.canManageMenuAndViewAllOrders) {
+            return const EnhancedAdminScreen();
+          }
+          return const DashboardScreen();
+        },
         AppRoutes.profileSettings: (context) => const ProfileSettingsScreen(),
         AppRoutes.changePassword: (context) => const ChangePasswordScreen(),
         AppRoutes.helpSupport: (context) => const HelpSupportScreen(),
