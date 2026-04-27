@@ -11,9 +11,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'ali@student.pk');
-  final _passwordController = TextEditingController(text: '123456');
-  String _selectedRole = 'Student';
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isSubmitting = false;
 
   @override
@@ -145,48 +144,13 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             const SizedBox(height: 28),
-                            DropdownButtonFormField<String>(
-                              initialValue: _selectedRole,
-                              decoration: InputDecoration(
-                                labelText: 'Role',
-                                labelStyle: const TextStyle(color: Color(0xFF1A237E)),
-                                prefixIcon: const Icon(Icons.badge_outlined, color: Color(0xFF1A237E)),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Color(0xFF1A237E), width: 2),
-                                ),
-                              ),
-                              style: const TextStyle(color: Color(0xFF1A237E)),
-                              dropdownColor: Colors.white,
-                              items: ['Student', 'Faculty', 'Admin'].map((role) {
-                                return DropdownMenuItem(
-                                  value: role,
-                                  child: Text(role, style: const TextStyle(color: Color(0xFF1A237E))),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedRole = value!;
-                                });
-                              },
-                            ),
-                            const SizedBox(height: 16),
                             TextFormField(
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
                               style: const TextStyle(color: Color(0xFF1A237E)),
                               decoration: InputDecoration(
                                 labelText: 'Email',
+                                hintText: 'someone@gmail.com',
                                 labelStyle: const TextStyle(color: Color(0xFF1A237E)),
                                 prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF1A237E)),
                                 filled: true,
@@ -222,6 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               style: const TextStyle(color: Color(0xFF1A237E)),
                               decoration: InputDecoration(
                                 labelText: 'Password',
+                                hintText: '****',
                                 labelStyle: const TextStyle(color: Color(0xFF1A237E)),
                                 prefixIcon: const Icon(Icons.lock_outlined, color: Color(0xFF1A237E)),
                                 filled: true,
